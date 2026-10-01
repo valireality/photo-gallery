@@ -13,6 +13,9 @@ import {
   AssetMetadataResponseDto,
   AssetMetadataRouteParams,
   AssetMetadataUpsertDto,
+  AssetMoveDto,
+  AssetMoveFolderCreateDto,
+  AssetMoveFoldersDto,
   AssetStatsDto,
   AssetStatsResponseDto,
   UpdateAssetDto,
@@ -115,6 +118,30 @@ export class AssetController {
   })
   copyAsset(@Auth() auth: AuthDto, @Body() dto: AssetCopyDto): Promise<void> {
     return this.service.copy(auth, dto);
+  }
+
+  @Post('move')
+  @Authenticated({ permission: Permission.AssetUpdate })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Endpoint({
+    summary: 'Move assets to a folder',
+    description: 'Move original files on disk and update their recorded paths.',
+    history: new HistoryBuilder().added('v3.3.0').beta('v3.3.0'),
+  })
+  moveAssets(@Auth() auth: AuthDto, @Body() dto: AssetMoveDto): Promise<void> {
+    return this.service.moveAssets(auth, dto);
+  }
+
+  @Post('move-folder')
+  @Authenticated({ permission: Permission.AssetUpdate })
+  createMoveFolder(@Auth() auth: AuthDto, @Body() dto: AssetMoveFolderCreateDto): Promise<{ path: string }> {
+    return this.service.createMoveFolder(auth, dto.parentFolder, dto.name);
+  }
+
+  @Post('move-folders')
+  @Authenticated({ permission: Permission.AssetUpdate })
+  getMoveFolders(@Body() dto: AssetMoveFoldersDto): Promise<{ path: string; parentPath: string; folders: string[] }> {
+    return this.service.getMoveFolders(dto.path);
   }
 
   @Put('metadata')

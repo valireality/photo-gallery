@@ -15,6 +15,14 @@ packages/sdk/fetch-client.ts linguist-generated=true
 
 *.sh text eol=lf
 
+# Extensionless shell entrypoints are copied into Linux containers and need LF endings too.
+server/bin/immich-admin text eol=lf
+server/bin/immich-dev text eol=lf
+server/bin/immich-healthcheck text eol=lf
+web/bin/immich-web text eol=lf
+packages/cli/bin/immich text eol=lf
+packages/plugin-sdk/plugin-sdk.mjs text eol=lf
+
 # Branding scripts are hand-maintained source and must always render as a textual
 # diff, even though a historical revision of test-i18n-branding.sh carried stray
 # NUL bytes in a sentinel string (now removed — see issue #672) that tripped git's

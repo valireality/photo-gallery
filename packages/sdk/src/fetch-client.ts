@@ -1577,6 +1577,12 @@ export type AssetMetadataBulkResponseDto = {
         [key: string]: any;
     };
 };
+export type AssetMoveDto = {
+    /** Assets to move */
+    assetIds: string[];
+    /** Absolute destination folder on the server */
+    destinationFolder: string;
+};
 export type ExifResponseDto = {
     /** City name */
     city?: string | null;
@@ -6262,6 +6268,18 @@ export function updateBulkAssetMetadata({ assetMetadataBulkUpsertDto }: {
     })));
 }
 /**
+ * Move assets to a folder
+ */
+export function moveAssets({ assetMoveDto }: {
+    assetMoveDto: AssetMoveDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/assets/move", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: assetMoveDto
+    })));
+}
+/**
  * Get asset statistics
  */
 export function getAssetStatistics({ isFavorite, isTrashed, visibility }: {
@@ -10629,6 +10647,18 @@ export function getUniqueOriginalPaths(opts?: Oazapfts.RequestOpts) {
     }>("/view/folder/unique-paths", {
         ...opts
     }));
+}
+export function createMoveFolder({ assetMoveFolderCreateDto }: { assetMoveFolderCreateDto: { parentFolder: string; name: string } }, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: { path: string };
+    }>('/assets/move-folder', { ...opts, method: 'POST', headers: { 'Content-Type': 'application/json', ...opts?.headers }, body: JSON.stringify(assetMoveFolderCreateDto) }));
+}
+export function getMoveFolders({ assetMoveFoldersDto }: { assetMoveFoldersDto: { path: string } }, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: { path: string; parentPath: string; folders: string[] };
+    }>('/assets/move-folders', { ...opts, method: 'POST', headers: { 'Content-Type': 'application/json', ...opts?.headers }, body: JSON.stringify(assetMoveFoldersDto) }));
 }
 /**
  * List all workflows

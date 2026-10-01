@@ -734,6 +734,7 @@
       <SelectAllAssets {timelineManager} assetInteraction={assetMultiSelectManager} />
     {/if}
     <ActionButton action={Actions.AddToAlbum} />
+    <ActionButton action={Actions.MoveToFolder} />
 
     {#if assetMultiSelectManager.isAllUserOwned}
       <FavoriteAction removeFavorite={assetMultiSelectManager.isAllFavorite} onFavorite={handleFavorite} />

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/com
 import { ShallowDehydrateObject } from 'kysely';
 import _ from 'lodash';
 import { DateTime, Duration } from 'luxon';
-import { isAbsolute } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
 import { AssetFace, AssetFile } from 'src/database';
 import { OnEvent, OnJob } from 'src/decorators';
@@ -18,6 +18,7 @@ import {
   AssetMetadataBulkUpsertDto,
   AssetMetadataResponseDto,
   AssetMetadataUpsertDto,
+  AssetMoveDto,
   AssetStatsDto,
   UpdateAssetDto,
   mapStats,
@@ -63,6 +64,132 @@ import { transformOcrBoundingBox } from 'src/utils/transform';
 
 @Injectable()
 export class AssetService extends BaseService {
+  async getMoveFolders(folderPath: string): Promise<{ path: string; parentPath: string; folders: string[] }> {
+    const folder = await this.storageRepository.realpath(resolve(folderPath)).catch(() => undefined);
+    const stat = folder ? await this.storageRepository.stat(folder).catch(() => undefined) : undefined;
+    if (!folder || !stat?.isDirectory()) throw new BadRequestException('Folder does not exist or is not accessible');
+    const entries = await this.storageRepository.readdirWithTypes(folder);
+    return {
+      path: folder,
+      parentPath: resolve(folder, '..'),
+      folders: entries.filter((entry) => entry.isDirectory()).map((entry) => resolve(folder, entry.name)).sort(),
+    };
+  }
+
+  async createMoveFolder(auth: AuthDto, parentFolder: string, name: string): Promise<{ path: string }> {
+    if (!name.trim() || name === '.' || name === '..' || /[\\/]/.test(name)) {
+      throw new BadRequestException('Folder name must be a single path segment');
+    }
+    const parent = await this.storageRepository.realpath(resolve(parentFolder)).catch(() => undefined);
+    const parentStat = parent ? await this.storageRepository.stat(parent).catch(() => undefined) : undefined;
+    if (!parent || !parentStat?.isDirectory()) throw new BadRequestException('Parent folder does not exist or is not accessible');
+    const target = resolve(parent, name.trim());
+    if (await this.storageRepository.checkFileExists(target)) throw new BadRequestException('A file or folder with this name already exists');
+    await this.storageRepository.mkdirSync(target);
+    return { path: target };
+  }
+
+  async moveAssets(auth: AuthDto, dto: AssetMoveDto): Promise<void> {
+    const { assetIds, destinationFolder } = dto;
+    await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: assetIds });
+
+    const dest = resolve(destinationFolder);
+    const destStat = await this.storageRepository.stat(dest).catch(() => undefined);
+    if (!destStat?.isDirectory()) {
+      throw new BadRequestException('Destination folder does not exist or is not accessible');
+    }
+    const destReal = await this.storageRepository.realpath(dest);
+    const assets = await this.assetRepository.getByIds(assetIds);
+    if (assets.length !== new Set(assetIds).size) {
+      throw new BadRequestException('One or more assets were not found');
+    }
+
+    const moves: Array<{
+      assetId: string;
+      source: string;
+      target: string;
+      sidecar: string;
+      sidecarTarget: string;
+      hasSidecar: boolean;
+      libraryId: string | null;
+    }> = [];
+    const targets = new Set<string>();
+    for (const asset of assets) {
+      if (asset.ownerId !== auth.user.id || !isAbsolute(asset.originalPath)) {
+        throw new ForbiddenException('Only disk-backed assets you own can be moved');
+      }
+
+      const libraries = await this.libraryRepository.getAll();
+      const targetLibrary = libraries.find((library) => library.importPaths.some((root) => this.isWithinPath(resolve(root), destReal)))?.id ?? null;
+
+      const source = await this.storageRepository.realpath(asset.originalPath).catch(() => undefined);
+      if (!source || !(await this.storageRepository.stat(source).catch(() => undefined))?.isFile()) throw new BadRequestException('Asset file is missing or is not accessible');
+
+      const target = resolve(destReal, basename(source));
+      if (source === target) {
+        continue;
+      }
+      if (targets.has(target) || (await this.storageRepository.checkFileExists(target))) {
+        throw new BadRequestException(`A file named ${basename(target)} already exists in the destination folder`);
+      }
+      targets.add(target);
+
+      const sidecar = `${source}.xmp`;
+      const sidecarTarget = `${target}.xmp`;
+      const hasSidecar = await this.storageRepository.checkFileExists(sidecar);
+      if (hasSidecar && (targets.has(sidecarTarget) || (await this.storageRepository.checkFileExists(sidecarTarget)))) {
+        throw new BadRequestException(`A sidecar for ${basename(target)} already exists in the destination folder`);
+      }
+      if (hasSidecar) {
+        targets.add(sidecarTarget);
+      }
+
+      moves.push({ assetId: asset.id, source, target, sidecar, sidecarTarget, hasSidecar, libraryId: targetLibrary });
+    }
+
+    for (const { assetId, source, target, sidecar, sidecarTarget, hasSidecar, libraryId } of moves) {
+      await this.moveDiskFile(source, target);
+      try {
+        if (hasSidecar) {
+          await this.moveDiskFile(sidecar, sidecarTarget);
+        }
+        await this.assetRepository.update({ id: assetId, originalPath: target, libraryId });
+      } catch (error) {
+        await this.moveDiskFile(target, source).catch(() => undefined);
+        if (hasSidecar) {
+          await this.moveDiskFile(sidecarTarget, sidecar).catch(() => undefined);
+        }
+        throw error;
+      }
+    }
+  }
+
+  private isWithinPath(root: string, candidate: string): boolean {
+    const path = relative(root, candidate);
+    return path === '' || (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path));
+  }
+
+  private async moveDiskFile(source: string, target: string): Promise<void> {
+    try {
+      await this.storageRepository.rename(source, target);
+    } catch (error: any) {
+      if (error.code !== 'EXDEV') {
+        throw error;
+      }
+      await this.storageRepository.copyFile(source, target);
+      const [sourceStat, targetStat] = await Promise.all([
+        this.storageRepository.stat(source),
+        this.storageRepository.stat(target),
+      ]);
+      if (sourceStat.size !== targetStat.size) {
+        await this.storageRepository.unlink(target);
+        throw new BadRequestException('File verification failed while moving the asset');
+      }
+      await this.storageRepository.utimes(target, sourceStat.atime, sourceStat.mtime);
+      await this.storageRepository.unlink(source);
+    }
+  }
+
   async getStatistics(auth: AuthDto, dto: AssetStatsDto) {
     if (dto.visibility === AssetVisibility.Locked) {
       requireElevatedPermission(auth);

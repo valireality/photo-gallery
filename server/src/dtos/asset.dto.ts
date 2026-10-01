@@ -63,6 +63,23 @@ export const AssetIdsSchema = z
   })
   .meta({ id: 'AssetIdsDto' });
 
+export const AssetMoveSchema = z
+  .object({
+    assetIds: z.array(z.uuidv4()).min(1).describe('Assets to move'),
+    destinationFolder: z.string().min(1).describe('Absolute destination folder on the server'),
+  })
+  .meta({ id: 'AssetMoveDto' });
+export class AssetMoveDto extends createZodDto(AssetMoveSchema) {}
+
+const AssetMoveFolderCreateSchema = z.object({
+  parentFolder: z.string().min(1),
+  name: z.string().min(1).max(255),
+}).meta({ id: 'AssetMoveFolderCreateDto' });
+export class AssetMoveFolderCreateDto extends createZodDto(AssetMoveFolderCreateSchema) {}
+
+const AssetMoveFoldersSchema = z.object({ path: z.string().min(1) }).meta({ id: 'AssetMoveFoldersDto' });
+export class AssetMoveFoldersDto extends createZodDto(AssetMoveFoldersSchema) {}
+
 export enum AssetJobName {
   REFRESH_FACES = 'refresh-faces',
   REFRESH_METADATA = 'refresh-metadata',

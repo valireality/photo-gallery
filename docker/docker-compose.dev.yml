@@ -46,6 +46,7 @@ services:
     command:
       - |
         mise install
+        pnpm install --frozen-lockfile
         touch /tmp/init-complete
         exec tail -f /dev/null
     volumes:
@@ -75,6 +76,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - ../packages/plugin-core:/build/plugins/immich-plugin-core
       - ../packages/plugin-gallery:/build/plugins/gallery-core
+      - external_libraries:/external_libraries
     env_file:
       - .env
     environment:
@@ -212,3 +214,4 @@ volumes:
   app_node_modules:
   sveltekit:
   coverage:
+  external_libraries:

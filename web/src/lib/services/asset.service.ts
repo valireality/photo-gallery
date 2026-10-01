@@ -25,6 +25,7 @@ import {
   mdiDownload,
   mdiDownloadBox,
   mdiFaceRecognition,
+  mdiFolderArrowDownOutline,
   mdiHeadSyncOutline,
   mdiHeart,
   mdiHeartOutline,
@@ -53,6 +54,7 @@ import { eventManager } from '$lib/managers/event-manager.svelte';
 import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import AssetAddToCollectionModal from '$lib/modals/AssetAddToCollectionModal.svelte';
 import AssetTagModal from '$lib/modals/AssetTagModal.svelte';
+import MoveAssetsModal from '$lib/modals/MoveAssetsModal.svelte';
 import ProfileImageCropperModal from '$lib/modals/ProfileImageCropperModal.svelte';
 import SharedLinkCreateModal from '$lib/modals/SharedLinkCreateModal.svelte';
 import { Route } from '$lib/route';
@@ -94,6 +96,15 @@ export const getAssetBulkActions = (
       }),
   };
 
+  const MoveToFolder: ActionItem = {
+    title: $t('move_to_folder'),
+    icon: mdiFolderArrowDownOutline,
+    $if: () =>
+      assetMultiSelectManager.assets.length > 0 && ownedAssets.length === assetMultiSelectManager.assets.length,
+    onAction: () =>
+      modalManager.show(MoveAssetsModal, { assetIds: assetMultiSelectManager.assets.map(({ id }) => id) }),
+  };
+
   const RefreshFacesJob: ActionItem = {
     title: $t('refresh_faces'),
     icon: mdiHeadSyncOutline,
@@ -119,7 +130,7 @@ export const getAssetBulkActions = (
     $if: () => ownedAssets.every((asset) => asset.isVideo),
   };
 
-  return { AddToAlbum, RefreshFacesJob, RefreshMetadataJob, RegenerateThumbnailJob, TranscodeVideoJob };
+  return { AddToAlbum, MoveToFolder, RefreshFacesJob, RefreshMetadataJob, RegenerateThumbnailJob, TranscodeVideoJob };
 };
 
 export const getAssetActions = (
@@ -234,6 +245,13 @@ export const getAssetActions = (
     shortcuts: [{ key: 'l' }],
     $if: () => canAddToAlbum && asset.visibility !== AssetVisibility.Locked && !asset.isTrashed,
     onAction: () => modalManager.show(AssetAddToCollectionModal, { assetIds: [asset.id], restrictToSpaceId }),
+  };
+
+  const MoveToFolder: ActionItem = {
+    title: $t('move_to_folder'),
+    icon: mdiFolderArrowDownOutline,
+    $if: () => isOwner && asset.originalPath.startsWith('/') && !asset.isTrashed,
+    onAction: () => modalManager.show(MoveAssetsModal, { assetIds: [asset.id] }),
   };
 
   const Offline: ActionItem = {
@@ -401,6 +419,7 @@ export const getAssetActions = (
     StopMotionPhoto,
     PlaySlideshow,
     AddToAlbum,
+    MoveToFolder,
     ZoomIn,
     ZoomOut,
     Copy,

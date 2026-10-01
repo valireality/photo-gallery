@@ -162,6 +162,7 @@
         {/if}
 
         <ActionMenuItem action={Actions.AddToAlbum} />
+        <ActionMenuItem action={Actions.MoveToFolder} />
         {#if album && (isOwner || isAlbumOwner)}
           <RemoveFromAlbumAction {album} onRemove={onRemoveFromAlbum} assetIds={[asset.id]} menuItem />
         {/if}

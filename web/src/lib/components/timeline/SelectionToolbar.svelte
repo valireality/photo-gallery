@@ -198,6 +198,7 @@
     {#if caps.canAddToAlbum}
       <ActionButton action={Actions.AddToAlbum} />
     {/if}
+    <ActionButton action={Actions.MoveToFolder} />
     {#if caps.canFavorite}
       <FavoriteAction removeFavorite={assetInteraction.isAllFavorite} {onFavorite} />
     {/if}
