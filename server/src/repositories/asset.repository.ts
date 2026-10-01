@@ -568,7 +568,21 @@ export function withTimeBucketAssetFilters<O>(
             visibleSpaceIds: options.visibleSpaceIds ?? [],
             viewerId: options.callerId ?? options.userIds![0],
           });
-          return options.personIds?.length && viewerId ? eb.or([ownerArm, inSharedAlbum(eb, viewerId)]) : ownerArm;
+          const personalArm = options.personIds?.length && viewerId
+            ? eb.or([ownerArm, inSharedAlbum(eb, viewerId)])
+            : ownerArm;
+
+          // A personal timeline must not re-introduce assets that are also surfaced by one of the
+          // viewer's Spaces. This matters for the viewer's own files in a Space-linked external
+          // library: the owner predicate alone still admits those rows by ownerId.
+          const viewerIdForSpaceExclusion = options.callerId ?? options.userIds![0];
+          const spaceAssets = spaceAssetPathBranches(eb, {
+            correlateAssetId: 'asset.id',
+            correlateLibraryId: 'asset.libraryId',
+            scope: { memberUserId: viewerIdForSpaceExclusion },
+            albumTimelineGate: 'space-tab',
+          });
+          return eb.and([personalArm, eb.not(eb.or(spaceAssets))]);
         }),
       )
       .$if(!!options.userIds && !!options.timelineSpaceIds, (qb) =>
@@ -928,7 +942,12 @@ export class AssetRepository {
     if (assets.length === 0) {
       return [];
     }
-    const ids = await this.db.insertInto('asset').values(assets).returning('id').execute();
+    const ids = await this.db
+      .insertInto('asset')
+      .values(assets)
+      .onConflict((oc) => oc.columns(['ownerId', 'libraryId', 'checksum']).where('libraryId', 'is not', null).doNothing())
+      .returning('id')
+      .execute();
     return ids.map(({ id }) => id);
   }
 
@@ -1380,6 +1399,16 @@ export class AssetRepository {
       .where('originalPath', '=', originalPath)
       .limit(1)
       .executeTakeFirst();
+  }
+
+  getLibraryAssetPaths(libraryId: string) {
+    return this.db
+      .selectFrom('asset')
+      .select(['id', 'originalPath'])
+      .where('libraryId', '=', asUuid(libraryId))
+      .where('deletedAt', 'is', null)
+      .where('isOffline', '=', false)
+      .execute();
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
@@ -2091,8 +2120,7 @@ export class AssetRepository {
               .selectFrom('asset')
               .select('originalPath')
               .whereRef('asset.originalPath', '=', eb.ref('path'))
-              .where('libraryId', '=', asUuid(libraryId))
-              .where('isExternal', '=', true),
+              .where('libraryId', '=', asUuid(libraryId)),
           ),
         ),
       )

@@ -10657,7 +10657,7 @@ export function createMoveFolder({ assetMoveFolderCreateDto }: { assetMoveFolder
 export function getMoveFolders({ assetMoveFoldersDto }: { assetMoveFoldersDto: { path: string } }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: { path: string; parentPath: string; folders: string[] };
+        data: { path: string; parentPath: string; folders: string[]; externalLibraries: Array<{ name: string; path: string }> };
     }>('/assets/move-folders', { ...opts, method: 'POST', headers: { 'Content-Type': 'application/json', ...opts?.headers }, body: JSON.stringify(assetMoveFoldersDto) }));
 }
 /**

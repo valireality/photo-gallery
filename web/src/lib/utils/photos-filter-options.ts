@@ -30,12 +30,10 @@ export type PhotosPersonFilterReference = {
  * timeline. The server query already ANDs the two gates; it just has to be told about both.
  */
 export function buildPhotosTimelineOptions(filters: FilterState, userId: string): Record<string, unknown> {
-  const includeSharedTimelineAssets = filters.isFavorite === undefined;
   const base: Record<string, unknown> = {
     userId,
     visibility: AssetVisibility.Timeline,
     withStacked: true,
-    ...(includeSharedTimelineAssets && { withPartners: true, withSharedSpaces: true }),
   };
 
   if (filters.personIds.length > 0) {

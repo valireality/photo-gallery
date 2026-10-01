@@ -204,7 +204,6 @@
       isInAlbum: nextFilters.isInAlbum === true ? true : undefined,
       takenAfter: context?.takenAfter,
       takenBefore: context?.takenBefore,
-      ...(nextFilters.isFavorite === undefined && { withSharedSpaces: true }),
     });
     const mappedPeople = response.people.map((p) => ({
       id: getPhotosPersonFilterId(p),
@@ -237,7 +236,7 @@
       return undefined;
     }
 
-    const withSharedSpaces = nextFilters.isFavorite === undefined;
+    const withSharedSpaces = false;
     const key = buildSmartSearchFacetKey({ query, filters: nextFilters, withSharedSpaces, language: $lang });
     if (smartFacets && smartFacetKey === key) {
       return smartFacets;
@@ -289,14 +288,12 @@
         $type: SearchSuggestionType.City,
         country,
         ...context,
-        ...(context?.isFavorite === undefined && { withSharedSpaces: true }),
       }),
     cameraModels: (make, context) =>
       getSearchSuggestions({
         $type: SearchSuggestionType.CameraModel,
         make,
         ...context,
-        ...(context?.isFavorite === undefined && { withSharedSpaces: true }),
       }),
   };
 
@@ -341,7 +338,7 @@
           smartSearchFacetsDto: buildSmartSearchFacetsParams({
             query,
             filters: { ...filters, country },
-            withSharedSpaces: filters.isFavorite === undefined,
+            withSharedSpaces: false,
             language: $lang,
           }),
         });
@@ -359,7 +356,7 @@
           smartSearchFacetsDto: buildSmartSearchFacetsParams({
             query,
             filters: { ...filters, make },
-            withSharedSpaces: filters.isFavorite === undefined,
+            withSharedSpaces: false,
             language: $lang,
           }),
         });
@@ -377,13 +374,10 @@
   const handleAddAllToCollection = () => {
     const query = committedQuery.trim();
     // Replay the active filters (and free-text query, if any) against search so the collector can
-    // page every matching id. Non-query mode mirrors buildPhotosTimelineOptions' partner/shared-space
-    // scoping so the collected set matches the timeline.
+    // page every matching id from the user's own timeline.
     const terms: SearchTerms = { ...filterStateToSearchTerms(filters), visibility: AssetVisibility.Timeline };
     if (query) {
       terms.query = query;
-    } else if (filters.isFavorite === undefined) {
-      terms.withSharedSpaces = true;
     }
     void modalManager.show(SearchAddAllToCollectionModal, {
       terms,
@@ -668,7 +662,7 @@
           {filters}
           language={$lang}
           isShared={false}
-          withSharedSpaces={filters.isFavorite === undefined}
+          withSharedSpaces={false}
           total={smartFacetTotal}
         />
       {:else}

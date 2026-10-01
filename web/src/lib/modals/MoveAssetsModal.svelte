@@ -8,6 +8,7 @@
   let { assetIds, onClose }: Props = $props();
   let destinationFolder = $state('');
   let folders = $state<string[]>([]);
+  let externalLibraries = $state<Array<{ name: string; path: string }>>([]);
   let currentPath = $state('/');
   let parentPath = $state('/');
   let newFolderName = $state('');
@@ -20,6 +21,7 @@
       currentPath = result.path;
       parentPath = result.parentPath;
       folders = result.folders;
+      externalLibraries = result.externalLibraries;
     } catch (error) {
       handleError(error, $t('move_assets_error'));
     } finally {
@@ -71,6 +73,15 @@
     <label for="destination-folder">{$t('destination_folder')}</label>
     <div class="immich-form-input truncate" id="destination-folder">{currentPath}</div>
     <button class="text-left text-sm underline" type="button" onclick={() => browse(parentPath)} disabled={pending || parentPath === currentPath}>↑ {$t('up_one_level')}</button>
+    {#if externalLibraries.length > 0}
+      <h3 class="mt-2 text-sm font-medium">{$t('external_libraries')}</h3>
+      <div class="max-h-32 overflow-y-auto rounded border border-immich-primary/20">
+        {#each externalLibraries as library}
+          <button class="block w-full truncate px-3 py-2 text-left hover:bg-immich-primary/10" type="button" onclick={() => browse(library.path)} disabled={pending}>📚 {library.name} · {library.path}</button>
+        {/each}
+      </div>
+    {/if}
+    <h3 class="mt-2 text-sm font-medium">{$t('folders')}</h3>
     <div class="max-h-48 overflow-y-auto rounded border border-immich-primary/20">
       {#each folders as folder}
         <button class="block w-full truncate px-3 py-2 text-left hover:bg-immich-primary/10" type="button" onclick={() => browse(folder)} disabled={pending}>📁 {folder.split(/[\\/]/).at(-1)}</button>

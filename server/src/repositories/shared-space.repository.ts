@@ -441,6 +441,15 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getSpaceIdsForMember(userId: string) {
+    return this.db
+      .selectFrom('shared_space_member')
+      .where('userId', '=', userId)
+      .select('spaceId')
+      .execute();
+  }
+
   // #1041: own-row-only by construction — always a specific (spaceId, albumId, userId), never a
   // bulk/admin write. onConflict doNothing makes hiding an already-hidden album a no-op, not an error.
   async hideAlbumForUser(
@@ -1479,6 +1488,29 @@ export class SharedSpaceRepository {
       .where('spaceId', '=', spaceId)
       .where('id', '=', folderId)
       .executeTakeFirst();
+  }
+
+  getLinkedAlbumByName(spaceId: string, folderId: string | null, albumName: string) {
+    const query = this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+      .select('album.id')
+      .where('shared_space_album.spaceId', '=', spaceId)
+      .where('album.albumName', '=', albumName);
+    return (folderId === null
+      ? query.where('shared_space_album.folderId', 'is', null)
+      : query.where('shared_space_album.folderId', '=', folderId)
+    ).executeTakeFirst();
+  }
+
+  getAlbumFolderByName(spaceId: string, parentId: string | null, name: string) {
+    const query = this.db
+      .selectFrom('shared_space_album_folder')
+      .selectAll()
+      .where('spaceId', '=', spaceId);
+    return (parentId === null ? query.where('parentId', 'is', null) : query.where('parentId', '=', parentId))
+      .execute()
+      .then((folders) => folders.find((folder) => folder.name.trim().toLowerCase() === name.trim().toLowerCase()));
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })

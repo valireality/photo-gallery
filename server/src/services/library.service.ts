@@ -289,6 +289,10 @@ export class LibraryService extends BaseService {
 
     await this.queuePostSyncJobs(assetIds);
 
+    if (assetIds.length > 0) {
+      await this.eventRepository.emit('AssetLibraryLocationUpdate', { libraryId: job.libraryId });
+    }
+
     // Queue face match for spaces linked to this library
     if (assetIds.length > 0) {
       const linkedSpaces = await this.sharedSpaceRepository.getSpacesLinkedToLibrary(job.libraryId);

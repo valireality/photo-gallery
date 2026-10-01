@@ -37,6 +37,7 @@ import {
   AssetStatus,
   AssetType,
   AssetVisibility,
+  ChecksumAlgorithm,
   JobName,
   JobStatus,
   Permission,
@@ -64,19 +65,24 @@ import { transformOcrBoundingBox } from 'src/utils/transform';
 
 @Injectable()
 export class AssetService extends BaseService {
-  async getMoveFolders(folderPath: string): Promise<{ path: string; parentPath: string; folders: string[] }> {
+  async getMoveFolders(
+    auth: AuthDto,
+    folderPath: string,
+  ): Promise<{ path: string; parentPath: string; folders: string[]; externalLibraries: Array<{ name: string; path: string }> }> {
     const folder = await this.storageRepository.realpath(resolve(folderPath)).catch(() => undefined);
     const stat = folder ? await this.storageRepository.stat(folder).catch(() => undefined) : undefined;
     if (!folder || !stat?.isDirectory()) throw new BadRequestException('Folder does not exist or is not accessible');
     const entries = await this.storageRepository.readdirWithTypes(folder);
+    const libraries = (await this.libraryRepository.getAll()).filter((library) => auth.user.isAdmin || library.ownerId === auth.user.id);
     return {
       path: folder,
       parentPath: resolve(folder, '..'),
       folders: entries.filter((entry) => entry.isDirectory()).map((entry) => resolve(folder, entry.name)).sort(),
+      externalLibraries: libraries.flatMap((library) => library.importPaths.map((path) => ({ name: library.name, path }))),
     };
   }
 
-  async createMoveFolder(auth: AuthDto, parentFolder: string, name: string): Promise<{ path: string }> {
+  async createMoveFolder(parentFolder: string, name: string): Promise<{ path: string }> {
     if (!name.trim() || name === '.' || name === '..' || /[\\/]/.test(name)) {
       throw new BadRequestException('Folder name must be a single path segment');
     }
@@ -112,6 +118,9 @@ export class AssetService extends BaseService {
       sidecarTarget: string;
       hasSidecar: boolean;
       libraryId: string | null;
+      isExternal: boolean;
+      checksum: Buffer;
+      checksumAlgorithm: ChecksumAlgorithm;
     }> = [];
     const targets = new Set<string>();
     for (const asset of assets) {
@@ -120,7 +129,14 @@ export class AssetService extends BaseService {
       }
 
       const libraries = await this.libraryRepository.getAll();
-      const targetLibrary = libraries.find((library) => library.importPaths.some((root) => this.isWithinPath(resolve(root), destReal)))?.id ?? null;
+      let targetLibrary: string | null = null;
+      for (const library of libraries) {
+        const roots = await Promise.all(library.importPaths.map((root) => this.storageRepository.realpath(root).catch(() => undefined)));
+        if (roots.some((root) => root && this.isWithinPath(root, destReal))) {
+          targetLibrary = library.id;
+          break;
+        }
+      }
 
       const source = await this.storageRepository.realpath(asset.originalPath).catch(() => undefined);
       if (!source || !(await this.storageRepository.stat(source).catch(() => undefined))?.isFile()) throw new BadRequestException('Asset file is missing or is not accessible');
@@ -144,16 +160,30 @@ export class AssetService extends BaseService {
         targets.add(sidecarTarget);
       }
 
-      moves.push({ assetId: asset.id, source, target, sidecar, sidecarTarget, hasSidecar, libraryId: targetLibrary });
+      const checksum = targetLibrary
+        ? this.cryptoRepository.hashSha1(`path:${target}`)
+        : await this.cryptoRepository.hashFile(source);
+      moves.push({
+        assetId: asset.id,
+        source,
+        target,
+        sidecar,
+        sidecarTarget,
+        hasSidecar,
+        libraryId: targetLibrary,
+        isExternal: !!targetLibrary,
+        checksum,
+        checksumAlgorithm: targetLibrary ? ChecksumAlgorithm.sha1Path : ChecksumAlgorithm.sha1File,
+      });
     }
 
-    for (const { assetId, source, target, sidecar, sidecarTarget, hasSidecar, libraryId } of moves) {
+    for (const { assetId, source, target, sidecar, sidecarTarget, hasSidecar, libraryId, isExternal, checksum, checksumAlgorithm } of moves) {
       await this.moveDiskFile(source, target);
       try {
         if (hasSidecar) {
           await this.moveDiskFile(sidecar, sidecarTarget);
         }
-        await this.assetRepository.update({ id: assetId, originalPath: target, libraryId });
+        await this.assetRepository.update({ id: assetId, originalPath: target, libraryId, isExternal, checksum, checksumAlgorithm });
       } catch (error) {
         await this.moveDiskFile(target, source).catch(() => undefined);
         if (hasSidecar) {
@@ -162,6 +192,11 @@ export class AssetService extends BaseService {
         throw error;
       }
     }
+
+    const targetLibraryIds = [...new Set(moves.flatMap(({ libraryId }) => (libraryId ? [libraryId] : [])))];
+    await Promise.all(
+      targetLibraryIds.map((libraryId) => this.eventRepository.emit('AssetLibraryLocationUpdate', { libraryId })),
+    );
   }
 
   private isWithinPath(root: string, candidate: string): boolean {

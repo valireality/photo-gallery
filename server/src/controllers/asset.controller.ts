@@ -134,14 +134,17 @@ export class AssetController {
 
   @Post('move-folder')
   @Authenticated({ permission: Permission.AssetUpdate })
-  createMoveFolder(@Auth() auth: AuthDto, @Body() dto: AssetMoveFolderCreateDto): Promise<{ path: string }> {
-    return this.service.createMoveFolder(auth, dto.parentFolder, dto.name);
+  createMoveFolder(@Body() dto: AssetMoveFolderCreateDto): Promise<{ path: string }> {
+    return this.service.createMoveFolder(dto.parentFolder, dto.name);
   }
 
   @Post('move-folders')
   @Authenticated({ permission: Permission.AssetUpdate })
-  getMoveFolders(@Body() dto: AssetMoveFoldersDto): Promise<{ path: string; parentPath: string; folders: string[] }> {
-    return this.service.getMoveFolders(dto.path);
+  getMoveFolders(
+    @Auth() auth: AuthDto,
+    @Body() dto: AssetMoveFoldersDto,
+  ): Promise<{ path: string; parentPath: string; folders: string[]; externalLibraries: Array<{ name: string; path: string }> }> {
+    return this.service.getMoveFolders(auth, dto.path);
   }
 
   @Put('metadata')

@@ -49,6 +49,7 @@ type EventMap = {
 
   // asset events
   AssetCreate: [{ asset: Pick<Asset, 'id' | 'ownerId'>; file?: UploadFile }];
+  AssetLibraryLocationUpdate: [{ libraryId: string }];
   AssetTag: [{ assetId: string; userId: string }];
   AssetUntag: [{ assetId: string }];
   AssetHide: [{ assetId: string; userId: string }];
