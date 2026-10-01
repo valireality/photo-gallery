@@ -16,12 +16,10 @@
 
   const space = $derived<SharedSpaceResponseDto>(data.space);
   const libraries = $derived<SharedSpaceLinkedLibraryDto[]>(space.linkedLibraries ?? []);
-  const linkedLibraryIds = $derived(libraries.map((library) => library.libraryId));
 
   async function openLinkLibraryModal() {
     const linkedCount = await modalManager.show(SpaceLinkLibraryModal, {
       spaceId: space.id,
-      linkedLibraryIds,
     });
     // The modal returns how many libraries it linked; refresh the shell's cached space only on change.
     if (linkedCount) {

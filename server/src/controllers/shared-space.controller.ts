@@ -46,6 +46,7 @@ import {
   SharedSpaceAlbumFolderMoveAlbumDto,
   SharedSpaceAlbumFolderParamDto,
   SharedSpaceAlbumFolderUpdateDto,
+  SharedSpaceAlbumCreateDto,
   SharedSpaceAlbumLinkQueryDto,
   SharedSpaceAlbumLinkUpdateDto,
   SharedSpaceAlbumMemberTimelineDto,
@@ -700,6 +701,17 @@ export class SharedSpaceController {
   @Endpoint({ summary: 'List albums linked to a shared space', history: new HistoryBuilder().added('v1').beta('v1') })
   getSharedSpaceAlbums(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<SharedSpaceLinkedAlbumDto[]> {
     return this.service.getLinkedAlbums(auth, id);
+  }
+
+  @Post(':id/albums')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumCreate })
+  @Endpoint({ summary: 'Create a Space-owned album', history: new HistoryBuilder().added('v1').beta('v1') })
+  createSpaceAlbum(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: SharedSpaceAlbumCreateDto,
+  ): Promise<{ id: string }> {
+    return this.service.createSpaceAlbum(auth, id, dto);
   }
 
   @Put(':id/albums/:albumId')

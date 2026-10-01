@@ -1490,29 +1490,6 @@ export class SharedSpaceRepository {
       .executeTakeFirst();
   }
 
-  getLinkedAlbumByName(spaceId: string, folderId: string | null, albumName: string) {
-    const query = this.db
-      .selectFrom('shared_space_album')
-      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
-      .select('album.id')
-      .where('shared_space_album.spaceId', '=', spaceId)
-      .where('album.albumName', '=', albumName);
-    return (folderId === null
-      ? query.where('shared_space_album.folderId', 'is', null)
-      : query.where('shared_space_album.folderId', '=', folderId)
-    ).executeTakeFirst();
-  }
-
-  getAlbumFolderByName(spaceId: string, parentId: string | null, name: string) {
-    const query = this.db
-      .selectFrom('shared_space_album_folder')
-      .selectAll()
-      .where('spaceId', '=', spaceId);
-    return (parentId === null ? query.where('parentId', 'is', null) : query.where('parentId', '=', parentId))
-      .execute()
-      .then((folders) => folders.find((folder) => folder.name.trim().toLowerCase() === name.trim().toLowerCase()));
-  }
-
   @GenerateSql({ params: [DummyValue.UUID] })
   getAlbumFoldersBySpace(spaceId: string) {
     return this.db

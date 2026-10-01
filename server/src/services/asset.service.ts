@@ -192,11 +192,6 @@ export class AssetService extends BaseService {
         throw error;
       }
     }
-
-    const targetLibraryIds = [...new Set(moves.flatMap(({ libraryId }) => (libraryId ? [libraryId] : [])))];
-    await Promise.all(
-      targetLibraryIds.map((libraryId) => this.eventRepository.emit('AssetLibraryLocationUpdate', { libraryId })),
-    );
   }
 
   private isWithinPath(root: string, candidate: string): boolean {

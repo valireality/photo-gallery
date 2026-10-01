@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Kysely, Transaction } from 'kysely';
-import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { AssetFace, SharedSpacePerson } from 'src/database';
 import { OnEvent, OnJob } from 'src/decorators';
 import { MapAlbumDto, mapAlbum } from 'src/dtos/album.dto';
@@ -33,6 +33,7 @@ import {
   SharedSpaceAlbumFolderMoveAlbumDto,
   SharedSpaceAlbumFolderUpdateDto,
   SharedSpaceAlbumLinkUpdateDto,
+  SharedSpaceAlbumCreateDto,
   SharedSpaceAlbumMemberTimelineDto,
   SharedSpaceAssetAddDto,
   SharedSpaceAssetLinkedAlbumDto,
@@ -954,115 +955,59 @@ export class SharedSpaceService extends BaseService {
 
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
 
-    const library = await this.libraryRepository.get(dto.libraryId);
-    if (!library) {
-      throw new BadRequestException('Library not found');
+    let sourcePaths: string[];
+    if (dto.importPath) {
+      sourcePaths = [await this.validateSpaceLibraryImportPath(dto.importPath)];
+    } else if (dto.libraryId) {
+      const sourceLibrary = await this.libraryRepository.get(dto.libraryId);
+      if (!sourceLibrary || sourceLibrary.spaceId) {
+        throw new BadRequestException('Personal external library not found');
+      }
+      sourcePaths = await Promise.all(
+        sourceLibrary.importPaths.map((path) => this.validateSpaceLibraryImportPath(path)),
+      );
+    } else {
+      throw new BadRequestException('An external folder path is required');
     }
 
-    const result = await this.sharedSpaceRepository.addLibrary({
-      spaceId,
-      libraryId: dto.libraryId,
-      addedById: auth.user.id,
-    });
-
-    // Re-running the link endpoint also repairs a previously linked library whose files were
-    // indexed or moved after the original link was created.
-    await this.createLibraryAlbumTree(auth.user.id, spaceId, library);
-
-    // Only queue face sync for newly created links (not duplicates)
-    if (result) {
+    const current = await this.libraryRepository.getSpaceLibrary(spaceId);
+    let libraryId: string;
+    if (!current) {
       const space = await this.sharedSpaceRepository.getById(spaceId);
-      if (space?.faceRecognitionEnabled) {
-        await this.jobRepository.queue({
-          name: JobName.SharedSpaceLibraryFaceSync,
-          data: { spaceId, libraryId: dto.libraryId },
-        });
-      }
+      if (!space) throw new NotFoundException('Space not found');
+      const library = await this.libraryRepository.create({
+        ownerId: auth.user.id,
+        spaceId,
+        name: `${space.name} Space Library`,
+        importPaths: [...new Set(sourcePaths)],
+        exclusionPatterns: ['**/@eaDir/**', '**/._*', '**/#recycle/**', '**/#snapshot/**', '**/.stversions/**', '**/.stfolder/**'],
+      });
+      libraryId = library.id;
+      await this.sharedSpaceRepository.addLibrary({ spaceId, libraryId, addedById: auth.user.id });
+    } else {
+      libraryId = current.id;
+      const importPaths = [...new Set([...current.importPaths, ...sourcePaths])];
+      await this.libraryRepository.update(current.id, { importPaths });
+    }
+
+    await this.jobRepository.queue({ name: JobName.LibrarySyncFilesQueueAll, data: { id: libraryId } });
+
+    const linked = await this.sharedSpaceRepository.getById(spaceId);
+    if (linked?.faceRecognitionEnabled) {
+      await this.jobRepository.queue({
+        name: JobName.SharedSpaceLibraryFaceSync,
+        data: { spaceId, libraryId },
+      });
     }
   }
 
-  @OnEvent({ name: 'AssetLibraryLocationUpdate', workers: [ImmichWorker.Microservices] })
-  async onAssetLibraryLocationUpdate({ libraryId }: ArgOf<'AssetLibraryLocationUpdate'>): Promise<void> {
-    const [library, links] = await Promise.all([
-      this.libraryRepository.get(libraryId),
-      this.sharedSpaceRepository.getSpacesLinkedToLibrary(libraryId),
-    ]);
-    if (!library) return;
-    for (const link of links) {
-      await this.createLibraryAlbumTree(link.addedById ?? library.ownerId, link.spaceId, library);
+  private async validateSpaceLibraryImportPath(importPath: string): Promise<string> {
+    if (!isAbsolute(importPath)) throw new BadRequestException('Import path must be absolute');
+    const selectedPath = await this.storageRepository.realpath(resolve(importPath)).catch(() => undefined);
+    if (!selectedPath || !(await this.storageRepository.stat(selectedPath).catch(() => undefined))?.isDirectory()) {
+      throw new BadRequestException('Selected path is not an accessible folder');
     }
-  }
-
-  private async createLibraryAlbumTree(
-    actorId: string,
-    spaceId: string,
-    library: { id: string; name: string; ownerId: string; importPaths: string[] },
-  ): Promise<void> {
-    const assets = await this.assetRepository.getLibraryAssetPaths(library.id);
-    if (assets.length === 0) return;
-
-    const byDirectory = new Map<string, Set<string>>();
-    const roots = await Promise.all(library.importPaths.map(async (root) => this.storageRepository.realpath(root).catch(() => resolve(root))));
-    for (const asset of assets) {
-      if (!isAbsolute(asset.originalPath)) continue;
-      const assetPath = resolve(asset.originalPath);
-      const root = roots
-        .filter((candidate) => {
-          const rel = relative(candidate, assetPath);
-          return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-        })
-        .sort((a, b) => b.length - a.length)[0];
-      if (!root) continue;
-
-      const relDirectory = dirname(relative(root, assetPath));
-      const segments = relDirectory === '.' ? [] : relDirectory.split(sep).filter(Boolean);
-      const directoryPaths = segments.map((_, index) => resolve(root, ...segments.slice(0, index + 1)));
-      if (directoryPaths.length === 0) directoryPaths.push(root);
-      for (const directory of directoryPaths) {
-        const ids = byDirectory.get(directory) ?? new Set<string>();
-        ids.add(asset.id);
-        byDirectory.set(directory, ids);
-      }
-    }
-
-    const folderByPath = new Map<string, string>();
-    const directories = [...byDirectory.keys()].sort((a, b) => a.split(sep).length - b.split(sep).length || a.localeCompare(b));
-    for (const directory of directories) {
-      const parentPath = dirname(directory);
-      const parentFolderId = folderByPath.get(parentPath) ?? null;
-      const name = roots.some((root) => directory === root) ? library.name : basename(directory);
-      const assetIds = [...byDirectory.get(directory)!];
-      const existingAlbum = await this.sharedSpaceRepository.getLinkedAlbumByName(spaceId, parentFolderId, name);
-      if (existingAlbum) {
-        await this.albumRepository.addAssetIdsToAlbums(assetIds.map((assetId) => ({ albumId: existingAlbum.id, assetId })));
-      } else {
-        const album = await this.albumRepository.create(
-          { albumName: name, albumThumbnailAssetId: assetIds[0] ?? null },
-          assetIds,
-          [{ userId: library.ownerId, role: AlbumUserRole.Owner }],
-          library.ownerId,
-        );
-        await this.sharedSpaceRepository.addAlbum({ spaceId, albumId: album.id, addedById: actorId, folderId: parentFolderId });
-      }
-      const folder = await this.ensureLibraryAlbumFolder(spaceId, parentFolderId, name, actorId);
-      folderByPath.set(directory, folder);
-    }
-  }
-
-  private async ensureLibraryAlbumFolder(
-    spaceId: string,
-    parentId: string | null,
-    name: string,
-    createdById: string,
-  ): Promise<string> {
-    const existing = await this.sharedSpaceRepository.getAlbumFolderByName(spaceId, parentId, name);
-    if (existing) return existing.id;
-    const result = await this.sharedSpaceRepository.createAlbumFolder(
-      { spaceId, parentId, name, createdById },
-      SHARED_SPACE_ALBUM_FOLDER_MAX_PER_SPACE,
-    );
-    if (result.outcome !== 'ok') throw new BadRequestException(SHARED_SPACE_ALBUM_FOLDER_CAP_MESSAGE);
-    return result.folder.id;
+    return selectedPath;
   }
 
   async linkAlbum(auth: AuthDto, spaceId: string, albumId: string, folderId?: string | null): Promise<void> {
@@ -1128,6 +1073,31 @@ export class SharedSpaceService extends BaseService {
         'Folder not found',
       );
     }
+  }
+
+  async createSpaceAlbum(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceAlbumCreateDto,
+  ): Promise<{ id: string }> {
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    const folderId = dto.folderId ?? null;
+    if (folderId && !(await this.sharedSpaceRepository.getAlbumFolderById(spaceId, folderId))) {
+      throw new BadRequestException('Folder not found');
+    }
+
+    const album = await this.albumRepository.create(
+      { albumName: dto.albumName, albumThumbnailAssetId: null, spaceId },
+      [],
+      [{ userId: auth.user.id, role: AlbumUserRole.Owner }],
+      auth.user.id,
+    );
+    await this.withAlbumFolderConstraintsMapped(
+      () => this.sharedSpaceRepository.addAlbum({ spaceId, albumId: album.id, addedById: auth.user.id, folderId }),
+      'Folder not found',
+    );
+    await this.queueAlbumGrantReconcile([album.id]);
+    return { id: album.id };
   }
 
   async unlinkAlbum(auth: AuthDto, spaceId: string, albumId: string): Promise<void> {
@@ -1524,7 +1494,12 @@ export class SharedSpaceService extends BaseService {
 
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
 
+    const library = await this.libraryRepository.get(libraryId);
     await this.sharedSpaceRepository.removeLibrary(spaceId, libraryId);
+    if (library?.spaceId === spaceId) {
+      await this.libraryRepository.softDelete(libraryId);
+      await this.jobRepository.queue({ name: JobName.LibraryDelete, data: { id: libraryId } });
+    }
     await this.sharedSpaceRepository.removePersonFacesByLibrary(spaceId, libraryId);
     await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
     await this.queueSpacePersonMetadataBackfill();

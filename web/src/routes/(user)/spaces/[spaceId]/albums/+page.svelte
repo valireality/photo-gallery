@@ -14,7 +14,6 @@
   import SpaceLinkAlbumModal from '$lib/modals/SpaceLinkAlbumModal.svelte';
   import { Route } from '$lib/route';
   import { handleError } from '$lib/utils/handle-error';
-  import { createAlbum } from '$lib/utils/album-utils';
   import { canDrop, type DragPayload } from '$lib/utils/space-album-folder-dnd';
   import { getFolderPath } from '$lib/utils/space-album-folders';
   import {
@@ -23,7 +22,7 @@
     deleteSharedSpaceAlbumFolder,
     getSharedSpaceAlbumFolders,
     getSharedSpaceAlbums,
-    linkAlbum,
+    createSpaceAlbum,
     setSharedSpaceAlbumFolder,
     SharedSpaceRole,
     unlinkAlbum,
@@ -253,18 +252,18 @@
   }
 
   async function handleCreateAlbum() {
-    const newAlbum = await createAlbum();
-    if (!newAlbum) {
-      return; // create failed; createAlbum already showed a toast
+    const albumName = await modalManager.show(SpaceAlbumFolderNameModal, {
+      title: $t('create_album'),
+      label: $t('album_name'),
+    });
+    if (!albumName) {
+      return;
     }
     try {
-      // `?? undefined` is load-bearing, not cosmetic: linkAlbum's folderId query param is
-      // `.optional()` and NOT nullable, so root must be OMITTED, not sent as null. Worse than a
-      // 400 — oazapfts' `explode` helper filters only `undefined` out of the params object, and
-      // `typeof null === 'object'`, so a literal `null` here makes it recurse into
-      // `Object.entries(null)` and throw a TypeError, hard-breaking album creation at the space
-      // root. Dropping this `??` isn't caught by unit tests because the SDK is module-mocked.
-      await linkAlbum({ id: space.id, albumId: newAlbum.id, folderId: currentFolderId ?? undefined });
+      const newAlbum = await createSpaceAlbum({
+        id: space.id,
+        sharedSpaceAlbumCreateDto: { albumName, folderId: currentFolderId },
+      });
       eventManager.emit('SpaceLinkAlbum', { spaceId: space.id });
       await invalidateAll();
       await goto(Route.viewSpaceAlbum({ spaceId: space.id, albumId: newAlbum.id }));

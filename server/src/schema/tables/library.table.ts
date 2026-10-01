@@ -12,6 +12,7 @@ import {
 } from '@immich/sql-tools';
 import { CreateIdColumn, UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
 import { library_after_insert } from 'src/schema/functions';
+import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { UserTable } from 'src/schema/tables/user.table';
 
 @Table('library')
@@ -33,6 +34,11 @@ export class LibraryTable {
 
   @ForeignKeyColumn(() => UserTable, { onDelete: 'CASCADE', onUpdate: 'CASCADE', nullable: false })
   ownerId!: string;
+
+  // Non-null for the isolated library owned by a Space. Such libraries are excluded from personal
+  // library listings and are deleted with their Space; their external source files are untouched.
+  @ForeignKeyColumn(() => SharedSpaceTable, { onDelete: 'CASCADE', nullable: true })
+  spaceId!: string | null;
 
   @Column({ type: 'text', array: true })
   importPaths!: string[];

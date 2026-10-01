@@ -132,7 +132,11 @@ const SharedSpaceMemberMetadataContributionSchema = z
 
 const SharedSpaceLibraryLinkSchema = z
   .object({
-    libraryId: z.uuidv4().describe('Library ID'),
+    libraryId: z.uuidv4().optional().describe('Existing library ID (legacy link)'),
+    importPath: z.string().min(1).optional().describe('External folder path to attach to this Space library'),
+  })
+  .refine((value) => Boolean(value.libraryId) !== Boolean(value.importPath), {
+    message: 'Specify exactly one of libraryId or importPath',
   })
   .meta({ id: 'SharedSpaceLibraryLinkDto' });
 
@@ -141,6 +145,13 @@ const SharedSpaceAlbumLinkUpdateSchema = z
     showInTimeline: z.boolean().describe('Include this album in the space timeline'),
   })
   .meta({ id: 'SharedSpaceAlbumLinkUpdateDto' });
+
+const SharedSpaceAlbumCreateSchema = z
+  .object({
+    albumName: z.string().min(1).describe('Space album name'),
+    folderId: z.uuidv4().nullable().optional().describe('Space album folder ID'),
+  })
+  .meta({ id: 'SharedSpaceAlbumCreateDto' });
 
 // #1041: the per-member "hide this album from MY timeline" preference — distinct from
 // SharedSpaceAlbumLinkUpdateSchema above, which is the shared, editor-only flag governing the
@@ -329,6 +340,7 @@ export class SharedSpaceMemberMetadataContributionDto extends createZodDto(
 ) {}
 export class SharedSpaceLibraryLinkDto extends createZodDto(SharedSpaceLibraryLinkSchema) {}
 export class SharedSpaceAlbumLinkUpdateDto extends createZodDto(SharedSpaceAlbumLinkUpdateSchema) {}
+export class SharedSpaceAlbumCreateDto extends createZodDto(SharedSpaceAlbumCreateSchema) {}
 export class SharedSpaceAlbumMemberTimelineDto extends createZodDto(SharedSpaceAlbumMemberTimelineSchema) {}
 export class SharedSpaceTimelineHidePreviewDto extends createZodDto(SharedSpaceTimelineHidePreviewSchema) {}
 export class SharedSpaceAlbumFolderDto extends createZodDto(SharedSpaceAlbumFolderSchema) {}

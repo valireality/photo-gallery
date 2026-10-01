@@ -1401,16 +1401,6 @@ export class AssetRepository {
       .executeTakeFirst();
   }
 
-  getLibraryAssetPaths(libraryId: string) {
-    return this.db
-      .selectFrom('asset')
-      .select(['id', 'originalPath'])
-      .where('libraryId', '=', asUuid(libraryId))
-      .where('deletedAt', 'is', null)
-      .where('isOffline', '=', false)
-      .execute();
-  }
-
   @GenerateSql({ params: [DummyValue.UUID] })
   async getLivePhotoCount(motionId: string): Promise<number> {
     const [{ count }] = await this.db

@@ -170,6 +170,7 @@ export class AlbumRepository {
       )
       .where('album_asset.assetId', 'in', assetIds)
       .where('album.deletedAt', 'is', null)
+      .where('album.spaceId', 'is', null)
       .select('album_asset.assetId')
       .execute();
 
@@ -258,6 +259,7 @@ export class AlbumRepository {
         join.onRef('album_user.albumId', '=', 'album.id').on('album_user.userId', '=', ownerId),
       )
       .where('album.deletedAt', 'is', null)
+      .where('album.spaceId', 'is', null)
       .$if(isOwned === true, (qb) => qb.where('album_user.role', '=', sql.lit(AlbumUserRole.Owner)))
       .$if(isOwned === false, (qb) => qb.where('album_user.role', '!=', sql.lit(AlbumUserRole.Owner)))
       .$if(isShared !== undefined, (qb) =>
@@ -337,6 +339,7 @@ export class AlbumRepository {
         ),
       )
       .where('album.deletedAt', 'is', null)
+      .where('album.spaceId', 'is', null)
       .execute();
   }
 
@@ -359,6 +362,7 @@ export class AlbumRepository {
         ),
       )
       .where('album.deletedAt', 'is', null)
+      .where('album.spaceId', 'is', null)
       .where('album_asset.assetId', 'in', assetIds)
       .select('album_asset.assetId as assetId')
       .select((eb) => eb.fn<string[]>('array_agg', ['album_asset.albumId']).as('albumIds'))
@@ -418,6 +422,7 @@ export class AlbumRepository {
         ]),
       )
       .where('album.deletedAt', 'is', null)
+      .where('album.spaceId', 'is', null)
       .execute();
   }
 

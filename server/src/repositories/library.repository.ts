@@ -28,6 +28,10 @@ export class LibraryRepository {
       .executeTakeFirst();
   }
 
+  getSpaceLibrary(spaceId: string) {
+    return this.db.selectFrom('library').selectAll().where('library.spaceId', '=', spaceId).executeTakeFirst();
+  }
+
   @GenerateSql({ params: [] })
   getAll(withDeleted = false) {
     return this.db

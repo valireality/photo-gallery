@@ -17463,6 +17463,52 @@
       }
     },
     "/shared-spaces/{id}/albums": {
+      "post": {
+        "operationId": "createSpaceAlbum",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceAlbumCreateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" }
+                  },
+                  "required": ["id"]
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [{ "bearer": [] }, { "cookie": [] }, { "api_key": [] }],
+        "summary": "Create a Space-owned album",
+        "tags": ["Shared Spaces"],
+        "x-immich-permission": "sharedSpace.album.create",
+        "x-immich-state": "Beta"
+      },
       "get": {
         "operationId": "getSharedSpaceAlbums",
         "parameters": [
@@ -17518,6 +17564,63 @@
           }
         ],
         "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Beta"
+      },
+      "post": {
+        "operationId": "createSpaceAlbum",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceAlbumCreateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Create a Space-owned album",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpaceAlbum.create",
         "x-immich-state": "Beta"
       }
     },
@@ -38335,6 +38438,26 @@
         ],
         "type": "object"
       },
+      "SharedSpaceAlbumCreateDto": {
+        "properties": {
+          "albumName": {
+            "description": "Space album name",
+            "minLength": 1,
+            "type": "string"
+          },
+          "folderId": {
+            "description": "Space album folder ID",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "albumName"
+        ],
+        "type": "object"
+      },
       "SharedSpaceAlbumFolderCreateDto": {
         "properties": {
           "name": {
@@ -38445,6 +38568,24 @@
         ],
         "type": "object"
       },
+      "SharedSpaceAlbumCreateDto": {
+        "properties": {
+          "albumName": {
+            "description": "Space album name",
+            "minLength": 1,
+            "type": "string"
+          },
+          "folderId": {
+            "description": "Space album folder ID",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": ["albumName"],
+        "type": "object"
+      },
       "SharedSpaceAlbumMemberTimelineDto": {
         "properties": {
           "showInTimeline": {
@@ -38536,16 +38677,18 @@
       },
       "SharedSpaceLibraryLinkDto": {
         "properties": {
+          "importPath": {
+            "description": "External folder path to attach to this Space library",
+            "minLength": 1,
+            "type": "string"
+          },
           "libraryId": {
-            "description": "Library ID",
+            "description": "Existing library ID (legacy link)",
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           }
         },
-        "required": [
-          "libraryId"
-        ],
         "type": "object"
       },
       "SharedSpaceLinkedAlbumDto": {

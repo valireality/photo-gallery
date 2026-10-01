@@ -1,115 +1,115 @@
 <script lang="ts">
-  import LoadingSpinner from '$lib/components/shared-components/LoadingSpinner.svelte';
+  import { getMoveFolders, linkLibrary } from '@immich/sdk';
+  import { FormModal } from '@immich/ui';
   import { handleError } from '$lib/utils/handle-error';
-  import { getAllLibraries, linkLibrary, type LibraryResponseDto } from '@immich/sdk';
-  import { FormModal, Icon, Input, ListButton, Stack, Text } from '@immich/ui';
-  import { mdiBookshelf, mdiLinkVariantPlus, mdiMagnify } from '@mdi/js';
-  import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
-  import { SvelteSet } from 'svelte/reactivity';
 
   type Props = {
     spaceId: string;
-    linkedLibraryIds: string[];
     onClose: (linkedCount?: number) => void;
   };
 
-  const { spaceId, linkedLibraryIds, onClose }: Props = $props();
+  let { spaceId, onClose }: Props = $props();
 
-  let libraries = $state<LibraryResponseDto[]>([]);
-  let loading = $state(true);
-  let submitting = $state(false);
-  let search = $state('');
-  const selectedIds = new SvelteSet<string>();
+  let currentPath = $state('/');
+  let parentPath = $state('/');
+  let folders = $state<string[]>([]);
+  let externalLibraries = $state<Array<{ name: string; path: string }>>([]);
+  let selectedPath = $state('');
+  let pending = $state(false);
 
-  // External libraries are an admin concept; offer every library not already linked to this space.
-  const linkable = $derived(libraries.filter((library) => !linkedLibraryIds.includes(library.id)));
-
-  const query = $derived(search.trim().toLowerCase());
-  const filtered = $derived(
-    query ? linkable.filter((library) => library.name.toLowerCase().includes(query)) : linkable,
-  );
-
-  onMount(async () => {
+  const browse = async (path: string) => {
+    pending = true;
     try {
-      libraries = await getAllLibraries();
+      const result = await getMoveFolders({ assetMoveFoldersDto: { path } });
+      currentPath = result.path;
+      parentPath = result.parentPath;
+      folders = result.folders;
+      externalLibraries = result.externalLibraries;
     } catch (error) {
       handleError(error, $t('spaces_linked_libraries_error_load'));
     } finally {
-      loading = false;
-    }
-  });
-
-  const toggle = (id: string) => {
-    if (selectedIds.has(id)) {
-      selectedIds.delete(id);
-    } else {
-      selectedIds.add(id);
+      pending = false;
     }
   };
 
+  $effect(() => {
+    void browse('/');
+  });
+
   const onSubmit = async () => {
-    submitting = true;
-    let linked = 0;
-    for (const libraryId of selectedIds) {
-      try {
-        await linkLibrary({ id: spaceId, sharedSpaceLibraryLinkDto: { libraryId } });
-        linked++;
-      } catch (error) {
-        handleError(error, $t('spaces_linked_libraries_error_link'));
-      }
+    if (!selectedPath || pending) return;
+    pending = true;
+    try {
+      await linkLibrary({ id: spaceId, sharedSpaceLibraryLinkDto: { importPath: selectedPath } });
+      onClose(1);
+    } catch (error) {
+      handleError(error, $t('spaces_linked_libraries_error_link'));
+      pending = false;
     }
-    submitting = false;
-    onClose(linked);
   };
 </script>
 
 <FormModal
-  icon={mdiLinkVariantPlus}
+  size="small"
   title={$t('spaces_linked_libraries_link_library')}
   submitText={$t('link')}
   cancelText={$t('cancel')}
-  disabled={selectedIds.size === 0 || submitting}
+  disabled={!selectedPath || pending}
   {onSubmit}
   {onClose}
 >
-  {#if loading}
-    <div class="flex w-full place-content-center place-items-center p-4">
-      <LoadingSpinner />
-    </div>
-  {:else if linkable.length === 0}
-    <Text class="py-6" color="muted">{$t('spaces_linked_libraries_no_libraries')}</Text>
-  {:else}
-    <Stack gap={2}>
-      <Input bind:value={search} placeholder={$t('search')} leadingIcon={mdiMagnify} />
-      <div
-        class="-mr-2 flex max-h-96 immich-scrollbar flex-col gap-1 overflow-y-auto pr-2"
-        data-testid="library-picker"
-      >
-        {#each filtered as library (library.id)}
-          <ListButton
-            selected={selectedIds.has(library.id)}
-            onclick={() => toggle(library.id)}
-            data-testid="library-picker-item"
+  <div class="my-4 flex flex-col gap-2">
+    <label>{$t('destination_folder')}</label>
+    <div class="immich-form-input truncate">{currentPath}</div>
+    <button
+      class="text-left text-sm underline"
+      type="button"
+      onclick={() => void browse(parentPath)}
+      disabled={pending || parentPath === currentPath}
+    >
+      ↑ {$t('up_one_level')}
+    </button>
+    {#if externalLibraries.length > 0}
+      <h3 class="mt-2 text-sm font-medium">{$t('external_libraries')}</h3>
+      <div class="max-h-32 overflow-y-auto rounded border border-immich-primary/20">
+        {#each externalLibraries as library (library.path)}
+          <button
+            class="block w-full truncate px-3 py-2 text-left hover:bg-immich-primary/10"
+            type="button"
+            onclick={() => void browse(library.path)}
+            disabled={pending}
           >
-            <div class="flex min-w-0 items-center gap-3">
-              <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-gray-800">
-                <Icon icon={mdiBookshelf} size="1.25rem" class="text-gray-400" />
-              </div>
-              <div class="min-w-0 text-start">
-                <Text fontWeight="medium" class="truncate">{library.name}</Text>
-                <Text size="tiny" color="muted" class="truncate">
-                  {$t('items_count', { values: { count: library.assetCount } })}{library.importPaths.length > 0
-                    ? ` · ${library.importPaths[0]}`
-                    : ''}
-                </Text>
-              </div>
-            </div>
-          </ListButton>
-        {:else}
-          <Text class="py-6" color="muted">{$t('search_no_result')}</Text>
+            📚 {library.name} · {library.path}
+          </button>
         {/each}
       </div>
-    </Stack>
-  {/if}
+    {/if}
+    <h3 class="mt-2 text-sm font-medium">{$t('folders')}</h3>
+    <div class="max-h-48 overflow-y-auto rounded border border-immich-primary/20">
+      {#each folders as folder (folder)}
+        <button
+          class="block w-full truncate px-3 py-2 text-left hover:bg-immich-primary/10"
+          type="button"
+          onclick={() => void browse(folder)}
+          disabled={pending}
+        >
+          📁 {folder.split(/[\\/]/).at(-1)}
+        </button>
+      {:else}
+        <p class="p-3 text-sm text-immich-fg/60">{$t('no_subfolders')}</p>
+      {/each}
+    </div>
+    <button
+      class="rounded bg-immich-primary/10 px-3 py-2"
+      type="button"
+      onclick={() => (selectedPath = currentPath)}
+      disabled={pending}
+    >
+      {$t('choose_folder')}
+    </button>
+    {#if selectedPath}
+      <p class="truncate text-sm">{$t('selected_folder')}: {selectedPath}</p>
+    {/if}
+  </div>
 </FormModal>

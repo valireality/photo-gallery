@@ -14,6 +14,7 @@ import { UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
 import { AssetOrder } from 'src/enum';
 import { album_soft_delete_shared_space_album } from 'src/schema/functions';
 import { AssetTable } from 'src/schema/tables/asset.table';
+import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 
 @Table({ name: 'album' })
 @UpdatedAtTrigger('album_updatedAt')
@@ -30,6 +31,11 @@ import { AssetTable } from 'src/schema/tables/asset.table';
 export class AlbumTable {
   @PrimaryGeneratedColumn()
   id!: Generated<string>;
+
+  // Space-owned albums are independent of the user's personal album collection and cascade with
+  // their Space. Ordinary albums keep this NULL, even when linked into one or more Spaces.
+  @ForeignKeyColumn(() => SharedSpaceTable, { onDelete: 'CASCADE', nullable: true })
+  spaceId!: string | null;
 
   @Column({ default: 'Untitled Album' })
   albumName!: Generated<string>;

@@ -3899,6 +3899,12 @@ export type SharedSpaceAlbumLinkUpdateDto = {
     /** Include this album in the space timeline */
     showInTimeline: boolean;
 };
+export type SharedSpaceAlbumCreateDto = {
+    /** Space album name */
+    albumName: string;
+    /** Space album folder ID */
+    folderId?: string | null;
+};
 export type SharedSpaceAlbumFolderMoveAlbumDto = {
     /** Destination folder ID; null moves the album to the space root */
     folderId: string | null;
@@ -3928,8 +3934,10 @@ export type SharedSpaceAssetLinkedAlbumDto = {
     albumName: string;
 };
 export type SharedSpaceLibraryLinkDto = {
-    /** Library ID */
-    libraryId: string;
+    /** Existing library ID (legacy link) */
+    libraryId?: string;
+    /** External folder path to attach to this Space library */
+    importPath?: string;
 };
 export type SharedSpaceMemberCreateDto = {
     /** Member role */
@@ -8954,6 +8962,22 @@ export function getSharedSpaceAlbums({ id }: {
     }>(`/shared-spaces/${encodeURIComponent(id)}/albums`, {
         ...opts
     }));
+}
+/**
+ * Create a Space-owned album
+ */
+export function createSpaceAlbum({ id, sharedSpaceAlbumCreateDto }: {
+    id: string;
+    sharedSpaceAlbumCreateDto: SharedSpaceAlbumCreateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: { id: string };
+    }>(`/shared-spaces/${encodeURIComponent(id)}/albums`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: sharedSpaceAlbumCreateDto
+    })));
 }
 /**
  * Unlink an album from a shared space

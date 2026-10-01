@@ -211,7 +211,7 @@ export class LibraryService extends BaseService {
 
   async getAll(): Promise<LibraryResponseDto[]> {
     const libraries = await this.libraryRepository.getAll(false);
-    return libraries.map((library) => mapLibrary(library));
+    return libraries.filter((library) => library.spaceId === null).map((library) => mapLibrary(library));
   }
 
   @OnJob({ name: JobName.LibraryDeleteCheck, queue: QueueName.Library })
@@ -288,10 +288,6 @@ export class LibraryService extends BaseService {
     );
 
     await this.queuePostSyncJobs(assetIds);
-
-    if (assetIds.length > 0) {
-      await this.eventRepository.emit('AssetLibraryLocationUpdate', { libraryId: job.libraryId });
-    }
 
     // Queue face match for spaces linked to this library
     if (assetIds.length > 0) {

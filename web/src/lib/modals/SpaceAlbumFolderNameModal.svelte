@@ -5,12 +5,13 @@
 
   type Props = {
     title: string;
+    label?: string;
     /** Pre-filled when renaming; empty when creating. */
     initialName?: string;
     onClose: (name?: string) => void;
   };
 
-  const { title, initialName = '', onClose }: Props = $props();
+  const { title, label = $t('space_album_folder_name_label'), initialName = '', onClose }: Props = $props();
 
   let value = $state(initialName);
 
@@ -23,7 +24,7 @@
 </script>
 
 <FormModal {title} icon={mdiFolderPlusOutline} {onClose} {onSubmit} size="small" submitText={$t('save')}>
-  <Field label={$t('space_album_folder_name_label')}>
+  <Field {label}>
     <Input bind:value />
   </Field>
 </FormModal>
